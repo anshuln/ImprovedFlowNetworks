@@ -1,0 +1,19 @@
+1. Finish baseline. 
+	a) make a 3 layer network trained on cifar on NLL. 
+	b) add non-linearity, additive coupling layer with relu. 
+
+
+
+# OPTIMIZATIONS 
+
+2. FFT of real input is complex symmetric (see wiki on DFT). Make benchmarks. 
+
+
+3. Maybe we can use this tf.rfft. 
+
+
+
+
+4. DONT Get gradient checkpointing ;; https://github.com/openai/gradient-checkpointing
+	(but use it to understand graph editor)
+	and try to get constant depth memory 

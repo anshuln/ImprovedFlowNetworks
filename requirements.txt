@@ -1,0 +1,2 @@
+python3.5 -m pip install tensorflow-gpu==2.0.0a0
+python3.5 -m pip install matplotlib
