@@ -1,7 +1,7 @@
 1. Finish baseline. 
 	a) make a 3 layer network trained on cifar on NLL. 
 	b) add non-linearity, additive coupling layer with relu. 
-
+----DONE
 
 
 # OPTIMIZATIONS 
