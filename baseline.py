@@ -1,7 +1,8 @@
 import tensorflow as tf
 import numpy as np
 import os
-import matplotlib.pyplot as plt 
+import matplotlib.pyplot as plt
+from opt_DFT import EfficientConv 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 """
 	Potential Speedups: 
@@ -178,14 +179,14 @@ def nll(y_true,y_pred): 	#TODO add scaling penalties?
 model = Sequential()
 
 model.add(Squeeze())
-model.add(Conv())
+model.add(EfficientConv())
 model.add(UpperCoupledReLU())
 model.compile(optimizer=tf.optimizers.Adam(0.001), loss=nll)
 
-pred 	= model.predict(X[:2])
+# pred 	= model.predict(X[:2])
 
-model.summary()
-model.fit(X[:20000],X[:20000],epochs=5)
+# model.summary()
+model.fit(X[:20],X[:20],epochs=1)
 pred1 	= model.predict(X[:2])
 rec = model.predict_inv(pred1)
 
