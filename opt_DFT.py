@@ -1,11 +1,33 @@
 import tensorflow as tf
 import numpy as np
 
-# TODO - put this here instead of in tf, and verify that it is correct - 
-#			tf.RegisterGradient('IRFFT3D')()
 #TODO - understand why w being rfft'd gives error but not X...
-#TODO - Implement RFFT ?
+#TODO - Implement IRFFT ?
 #TODO - Benchmark
+
+@tf.RegisterGradient('IRFFT3D')
+def irfft3dGrad(op,grad):
+	'''
+	The gradient to be backpropagated from irfft3d is
+	the rfft of the incoming gradient times a mask and scaling factor 
+	(as seen in the tensorflow source code, TODO - prove)
+	Args - op - operation
+		   grad - incoming gradient
+	'''
+	'''
+	tf doesn't have inbuilt gradient functions for irfft3d and rfft3d, so I wrote an implementation for rfft, 
+	and custom gradients for irfft, since this was the easiest alternative
+	'''
+	fft_length = op.inputs[1]
+	input_shape = op.inputs[0].get_shape().as_list()
+	odd_output = fft_length[-1]%2
+
+	mask = tf.concat([tf.ones((1)),2*tf.ones(input_shape[-1]-2+odd_output),tf.ones((1-odd_output))],0)
+
+	scaling = float(1/np.prod(np.array(grad.get_shape().as_list()[-3:])))	#Scales according to the dimensions undergoing rfft3d
+
+	return tf.signal.rfft3d(grad,fft_length) *  tf.cast((mask*scaling),tf.complex64), None
+
 class EfficientConv(tf.keras.layers.Layer): 
 
 	#Uses tf.rfft, which gives an output of h*w*c/2 instead of h*w*c. This means self.w is smaller by a factor of 2
@@ -13,6 +35,7 @@ class EfficientConv(tf.keras.layers.Layer):
 		super(EfficientConv, self).__init__()
 	
 	def rfft3d(self,X,inp_shape):
+		#TensorFlow does not have predefined gradients for rfft3d, hence we need to implement it...
 		'''
 		Args : X - Tensor of 3 or 4 dims
 			   inp_shape - shape of X as a list
@@ -30,12 +53,9 @@ class EfficientConv(tf.keras.layers.Layer):
 
 
 
-	# def irfft3d(self,X,shape):
-
-
 	def call(self, X): 
 		output_shape = X.shape
-		X = tf.signal.rfft3d(X / self.scale) 
+		X = self.rfft3d(X / self.scale,output_shape) 
 		X = X * self.w
 		X = tf.signal.irfft3d(X * self.scale,output_shape[1:] ) 
 		X = tf.math.real(X)
@@ -45,10 +65,11 @@ class EfficientConv(tf.keras.layers.Layer):
 
 	def call_inv(self, X): 
 		# return X
+		#Since we don't require gradients of any of the operations defined here, we just use inbuilt tf ops
 		output_shape = X.shape
 		X = tf.signal.rfft3d(X * self.scale ) # self.scale correctly
 		#The next line is a redundant computation necessary because w needs to be an EagerTensor for the output to be eagerly executed, and that was not the case earlier
-		self.w 	= self.rfft3d(self.w_real / self.scale,self.w_real.get_shape().as_list())
+		self.w 	= tf.signal.rfft3d(self.w_real / self.scale,self.w_real.get_shape().as_list())
 
 		X = X / self.w
 		print('InverseComputation',output_shape,X.shape )

@@ -8,10 +8,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 	Potential Speedups: 
 
 		32 float -> 16 float (64 complex to 32 complex )
-		tf.fft3d -> tf.rfft3d 
-
-	Current problems - Params not showing up.
-					   Tensor conversion stuff happening
+		tf.fft3d -> tf.rfft3d - DONE, in a convoluted way
 
 	Goals - See todo.txt
 
@@ -167,7 +164,7 @@ class Squeeze(tf.keras.layers.Layer):
 def log_normal_density(x): return tf.math.reduce_sum( -1/2 * (x**2/std_dev**2 + tf.math.log(2*np.pi*std_dev**2)) )
 
 def nll(y_true,y_pred): 	#TODO add scaling penalties?
-	logdet = model.log_det()
+	logdet = model1.log_det()
 	print(y_pred, y_true, logdet)
 
 	normal = log_normal_density(y_pred) 
@@ -176,19 +173,21 @@ def nll(y_true,y_pred): 	#TODO add scaling penalties?
 	
 
 
-model = Sequential()
+model1 = Sequential()
 
-model.add(Squeeze())
-model.add(EfficientConv())
-model.add(UpperCoupledReLU())
-model.compile(optimizer=tf.optimizers.Adam(0.001), loss=nll)
+model1.add(Squeeze())
+model1.add(EfficientConv())
+model1.add(UpperCoupledReLU())
+model1.compile(optimizer=tf.optimizers.Adam(0.001), loss=nll)
 
-# pred 	= model.predict(X[:2])
 
-# model.summary()
-model.fit(X[:20],X[:20],epochs=1)
-pred1 	= model.predict(X[:2])
-rec = model.predict_inv(pred1)
+pred 	= model1.predict(X[:2])
+
+model1.summary()
+model1.fit(X[:20],X[:20],epochs=1)
+
+pred1 	= model1.predict(X[:2])
+rec = model1.predict_inv(pred1)
 
 
 
