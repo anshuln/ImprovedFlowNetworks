@@ -7,11 +7,13 @@
 # OPTIMIZATIONS 
 
 2. FFT of real input is complex symmetric (see wiki on DFT). Make benchmarks. 
-
+The optimized conv layer using this 5% slower than one without it,
+--Almost done, need to benchmark
 
 3. Maybe we can use this tf.rfft. 
-
-
+Made a custom implrmentation of rfft3d, because tf implementation doesn't have gradients defined. 
+My implementation is almost as good as the tf implementation on time consumption metric.
+--DONE
 
 
 4. DONT Get gradient checkpointing ;; https://github.com/openai/gradient-checkpointing

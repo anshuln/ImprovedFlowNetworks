@@ -3,7 +3,9 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 from opt_DFT import EfficientConv 
+import time
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
+from memory_profiler import profile
 """
 	Potential Speedups: 
 
@@ -48,7 +50,8 @@ class Conv(tf.keras.layers.Layer):
 
 	def __init__(self,trainable=True): 
 		super(Conv, self).__init__()
-		
+	
+
 	def call(self, X): 
 		X = tf.cast(X, dtype=tf.complex64)
 		X = tf.signal.fft3d(X / self.scale) 
@@ -164,7 +167,7 @@ class Squeeze(tf.keras.layers.Layer):
 def log_normal_density(x): return tf.math.reduce_sum( -1/2 * (x**2/std_dev**2 + tf.math.log(2*np.pi*std_dev**2)) )
 
 def nll(y_true,y_pred): 	#TODO add scaling penalties?
-	logdet = model1.log_det()
+	logdet = model2.log_det()
 	print(y_pred, y_true, logdet)
 
 	normal = log_normal_density(y_pred) 
@@ -180,22 +183,38 @@ model1.add(EfficientConv())
 model1.add(UpperCoupledReLU())
 model1.compile(optimizer=tf.optimizers.Adam(0.001), loss=nll)
 
+model2 = Sequential()
 
-pred 	= model1.predict(X[:2])
+model2.add(Squeeze())
+model2.add(Conv())
+model2.add(UpperCoupledReLU())
+model2.compile(optimizer=tf.optimizers.Adam(0.001), loss=nll)
+avg1 = 0
+avg2 = 0
+# for i in range(50):
+# 	t2 = time.time()
+# 	model2.predict(X)
+# 	avg2+=time.time()-t2
 
-model1.summary()
-model1.fit(X[:20],X[:20],epochs=1)
+# 	t1 = time.time()
+# 	model1.predict(X)
+# 	avg1+=time.time() - t1
+@profile
+def fit():
+	model2.fit(X[:2000],X[:2000],epochs=10)
+# print(avg2/avg1)
+
+fit()
+fixed_noise = tf.random.normal((1,16,16,12),0,std_dev)
 
 pred1 	= model1.predict(X[:2])
-rec = model1.predict_inv(pred1)
-
-
+rec = model1.predict_inv(fixed_noise[:1])
 
 fig, ax = plt.subplots(1, 3)
-
+print(rec.get_shape())
 ax[0].imshow(prettify(X[1].reshape(32,32,3)))
 ax[1].imshow(prettify(pred1[1].reshape(32,32,3)))
-ax[2].imshow(prettify(rec.numpy()[1].reshape(32,32,3)))
+ax[2].imshow(prettify(rec.numpy()[0].reshape(32,32,3)))
 
 
 

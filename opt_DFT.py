@@ -1,9 +1,10 @@
 import tensorflow as tf
 import numpy as np
+from memory_profiler import profile
 
-#TODO - understand why w being rfft'd gives error but not X...
+#TODO - understand why w being rfft'd gives error but not X... - DONE
 #TODO - Implement IRFFT ?
-#TODO - Benchmark
+#TODO - Benchmark - Can't access memory usage for some reason...
 
 @tf.RegisterGradient('IRFFT3D')
 def irfft3dGrad(op,grad):
@@ -15,7 +16,7 @@ def irfft3dGrad(op,grad):
 		   grad - incoming gradient
 	'''
 	'''
-	tf doesn't have inbuilt gradient functions for irfft3d and rfft3d, so I wrote an implementation for rfft, 
+	tf doesn't have inbuilt gradient functions for irfft3d and rfft3d, so I wrote an implementation of rfft, 
 	and custom gradients for irfft, since this was the easiest alternative
 	'''
 	fft_length = op.inputs[1]
@@ -36,6 +37,7 @@ class EfficientConv(tf.keras.layers.Layer):
 	
 	def rfft3d(self,X,inp_shape):
 		#TensorFlow does not have predefined gradients for rfft3d, hence we need to implement it...
+		#Further, it performs almost as well as the library function
 		'''
 		Args : X - Tensor of 3 or 4 dims
 			   inp_shape - shape of X as a list
@@ -55,8 +57,8 @@ class EfficientConv(tf.keras.layers.Layer):
 
 	def call(self, X): 
 		output_shape = X.shape
-		X = self.rfft3d(X / self.scale,output_shape) 
-		X = X * self.w
+		X = tf.signal.rfft3d(X / self.scale,output_shape[1:])  	#Using inbuilt function here because this doesn't contribute to the gradient calculations
+		X = X * self.w 	#This computation is smaller than doing it without rfft
 		X = tf.signal.irfft3d(X * self.scale,output_shape[1:] ) 
 		X = tf.math.real(X)
 		print(self.w.shape,X.shape)
@@ -77,7 +79,7 @@ class EfficientConv(tf.keras.layers.Layer):
 		X = tf.math.real(X)
 		return X
 
-	def log_det(self): 	return tf.math.reduce_sum(tf.math.log(tf.math.abs(self.w)))
+	def log_det(self): 	return tf.math.reduce_sum(tf.math.log(tf.math.abs(self.w_real)))
 
 
 	def build(self, input_shape): 
