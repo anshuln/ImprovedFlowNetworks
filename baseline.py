@@ -181,31 +181,31 @@ model1 = Sequential()
 model1.add(Squeeze())
 model1.add(EfficientConv())
 model1.add(UpperCoupledReLU())
-model1.compile(optimizer=tf.optimizers.Adam(0.001), loss=nll)
+# model1.compile(optimizer=tf.optimizers.Adam(0.001), loss=nll)
 
-model2 = Sequential()
+# model2 = Sequential()
 
-model2.add(Squeeze())
-model2.add(Conv())
-model2.add(UpperCoupledReLU())
-model2.compile(optimizer=tf.optimizers.Adam(0.001), loss=nll)
-avg1 = 0
-avg2 = 0
-# for i in range(50):
-# 	t2 = time.time()
-# 	model2.predict(X)
-# 	avg2+=time.time()-t2
+# model2.add(Squeeze())
+# model2.add(Conv())
+# model2.add(UpperCoupledReLU())
+# model2.compile(optimizer=tf.optimizers.Adam(0.001), loss=nll)
+# avg1 = 0
+# avg2 = 0
+# # for i in range(50):
+# # 	t2 = time.time()
+# # 	model2.predict(X)
+# # 	avg2+=time.time()-t2
 
-# 	t1 = time.time()
-# 	model1.predict(X)
-# 	avg1+=time.time() - t1
-@profile
-def fit():
-	model2.fit(X[:2000],X[:2000],epochs=10)
-# print(avg2/avg1)
+# # 	t1 = time.time()
+# # 	model1.predict(X)
+# # 	avg1+=time.time() - t1
+# @profile
+# def fit():
+# 	model2.fit(X[:2000],X[:2000],epochs=10)
+# # print(avg2/avg1)
 
-fit()
-fixed_noise = tf.random.normal((1,16,16,12),0,std_dev)
+# fit()
+# fixed_noise = tf.random.normal((1,16,16,12),0,std_dev)
 
 pred1 	= model1.predict(X[:2])
 rec = model1.predict_inv(fixed_noise[:1])
