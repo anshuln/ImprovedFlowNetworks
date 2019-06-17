@@ -40,16 +40,17 @@ class FlowSequential(tf.keras.Sequential):
 	def _call(self,X,training=True):		#Hack is to differentiate it from predict, and to build the model....
 		self.saved_hidden = []
 		self.saved_hidden.append(X)
-		for layer in self.layers:
+		for layer in self.layers[:-1]:
 			X = layer.call(X)
 			# print(X.shape)
+
 		self.saved_hidden.append(X)
 
 	def log_det(self): 
-		det = 0
+		det = 0.
 		for layer in self.layers: 
 			if isinstance(layer, tf.keras.layers.InputLayer): continue 
-			det += layer.log_det()
+			det = tf.add(det,layer.log_det())
 		return det
 
 	def compute_gradients(self,X):
@@ -57,32 +58,32 @@ class FlowSequential(tf.keras.Sequential):
 		Computes gradients efficiently
 		Returns - Tuple with first entry being list of grads and second loss
 		'''
+		self._call(X)		#I think this records all operations onto the tape, thereby destroying purpose of checkpointing...
+		x = self.saved_hidden[-1]
+		last_layer = self.layers[-1]
 		with tf.GradientTape() as tape:
-			# tape.watch(x)
-			self._call(X)
-			y_fin = self.saved_hidden[-1]
-			last_layer = self.layers[-1]
-			# print(y_fin.shape)
-			x = last_layer.call_inv(y_fin)
-			loss = self.loss_function(y_fin)	#May have to change
-			grads_combined = tape.gradient(loss,[x]+last_layer.trainable_variables)
-			dy, final_grads = grads_combined[0], grads_combined[1:]
+			tape.watch(x)
+			# print(tape.watched_variables())
+			loss = self.loss_function(last_layer.call(x))	#May have to change
+		grads_combined = tape.gradient(loss,[x]+last_layer.trainable_variables)
+		dy, final_grads = grads_combined[0], grads_combined[1:]
 
-		# print(dy)
 		y=x
-
 		intermediate_grads = []
+
 		for layer in self.layers[-2:0:-1]:		#Not iterating over the first layer since we don't want that gradient to change according to input
 			x = layer.call_inv(y)
 			dy,grads = layer.backward_grads(x,y,dy)
 			intermediate_grads = grads+intermediate_grads
 			y = x 
 
+		x = self.layers[0].call_inv(y)
+
 		with tf.GradientTape() as tape:
+			y = self.layers[0].call(x)
 			init_grads = tape.gradient(y,self.layers[0].trainable_variables,output_gradients=dy)
 
 		grads_all = init_grads + final_grads + intermediate_grads 	#Check ordering once, compare with model.trainable_variables
-
 		return grads_all,loss
 
 class LayerWithGrads(tf.keras.layers.Layer):	#Virtual Class
@@ -108,9 +109,10 @@ class Conv(tf.keras.layers.Layer):
 	def backward_grads(self,x,y,dy):
 		with tf.GradientTape() as tape:
 			tape.watch(x)
-		grads_combined = tape.gradient(y,[x]+self.trainable_variables,output_gradients=dy)
+			tape.watch(self.w_real)
+			y_ = self.call(x)
+		grads_combined = tape.gradient(y_,[x]+self.trainable_variables,output_gradients=dy)
 		dy,grads = grads_combined[0],grads_combined[1:]
-
 		return dy,grads
 
 	def __init__(self,trainable=True): 
@@ -121,6 +123,12 @@ class Conv(tf.keras.layers.Layer):
 	def call(self, X): 
 		if self.built == False:    #For some reason the layer is not being built without this line
 			self.build(X.get_shape().as_list())
+
+		#The next 2 lines are a redundant computation necessary because w needs to be an EagerTensor for the output to be eagerly executed, and that was not the case earlier
+		#EagerTensor is required for backprop to work...
+		#TODO - figure out a way to avoid, or open an issue with tf...
+		self.w 	= tf.cast(self.w_real, dtype=tf.complex64)
+		self.w 	= tf.signal.fft3d(self.w / self.scale)
 
 		X = tf.cast(X, dtype=tf.complex64)
 		X = tf.signal.fft3d(X / self.scale) 
@@ -144,7 +152,7 @@ class Conv(tf.keras.layers.Layer):
 		X = tf.math.real(X)
 		return X
 
-	def log_det(self): 	return tf.math.reduce_sum(tf.math.log(tf.math.abs(self.w)))
+	def log_det(self): 	return tf.math.reduce_sum(tf.math.log(tf.math.abs(tf.signal.fft3d(tf.cast(self.w_real/self.scale,dtype=tf.complex64)))))	#Need to return EagerTensor
 
 
 	def build(self, input_shape): 
@@ -295,11 +303,13 @@ def main():
 
 	model.add(Squeeze())
 	model.add(Conv())
+	model.add(Conv())
+
 	# model.add(UpperCoupledReLU())
 
 	print(model.layers)
 
-	epochs = 10
+	epochs = 1
 	fast = 100
 	optimizer = tf.optimizers.Adam(0.001)
 	pred1 	= model.predict(X[:1])	#Don't remove,essential to build the layers...
