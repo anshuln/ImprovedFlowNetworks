@@ -1,6 +1,7 @@
 import tensorflow as tf 
 import numpy as np 
 import os
+from matplotlib import pyplot as plt
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 '''
@@ -12,6 +13,11 @@ Adapted version of this code - https://github.com/tensorflow/tensorflow/tree/mas
 '''
 
 std_dev = 2**8
+def prettify(x): #Scales images between 0,1
+	x = x - x.min()
+	x = x / x.max()
+	return x
+
 class FlowSequential(tf.keras.Sequential):
 	
 	# def __init__(self):
@@ -24,7 +30,7 @@ class FlowSequential(tf.keras.Sequential):
 
 		log_det = self.log_det()
 		normal = log_normal_density(X)
-		return -(logdet + normal)
+		return -(log_det + normal)
 
 	def predict_inv(self,X):
 		for layer in self.layers[::-1]:
@@ -36,6 +42,7 @@ class FlowSequential(tf.keras.Sequential):
 		self.saved_hidden.append(X)
 		for layer in self.layers:
 			X = layer.call(X)
+			# print(X.shape)
 		self.saved_hidden.append(X)
 
 	def log_det(self): 
@@ -45,21 +52,23 @@ class FlowSequential(tf.keras.Sequential):
 			det += layer.log_det()
 		return det
 
-	def compute_gradients(self):
+	def compute_gradients(self,X):
 		'''
-		Computes gradients effieciently
+		Computes gradients efficiently
 		Returns - Tuple with first entry being list of grads and second loss
 		'''
-		y_fin = self.saved_hidden[-1]
-		last_layer = self.layers[-1]
-		print(y_fin)
-		x = last_layer.call_inv(y_fin)
 		with tf.GradientTape() as tape:
-			tape.watch(x)
+			# tape.watch(x)
+			self._call(X)
+			y_fin = self.saved_hidden[-1]
+			last_layer = self.layers[-1]
+			# print(y_fin.shape)
+			x = last_layer.call_inv(y_fin)
 			loss = self.loss_function(y_fin)	#May have to change
-		grads_combined = tape.gradient(loss,[x]+last_layer.trainable_variables)
-		dy, final_grads = grads_combined[0], grads_combined[1:]
+			grads_combined = tape.gradient(loss,[x]+last_layer.trainable_variables)
+			dy, final_grads = grads_combined[0], grads_combined[1:]
 
+		# print(dy)
 		y=x
 
 		intermediate_grads = []
@@ -163,7 +172,7 @@ class Conv(tf.keras.layers.Layer):
 def ReLU(x): return tf.math.maximum( x, 0 )
 
 
-class UpperCoupledReLU(tf.keras.layers.Layer): 
+class UpperCoupledReLU(tf.keras.layers.Layer): 		#TODO - fix problem with concat giving bad object
 	def __init__(self,trainable=True): 
 		self.built = False
 		super(UpperCoupledReLU, self).__init__()
@@ -191,7 +200,7 @@ class UpperCoupledReLU(tf.keras.layers.Layer):
 
 
 	def call_inv(self, outputs): 	
-		print(outputs.get_shape())
+		print(tf.shape(outputs))
 		_, h, w, c = outputs.shape
 
 		# assumes c is even
@@ -265,11 +274,11 @@ class Squeeze(tf.keras.layers.Layer):
 
 
 def train_for_one_iter(model,X,optimizer):
-	y = model._call(X)	#Updates saved_hidden
-	grads,loss = model.compute_gradients()
-	optimizer.apply_gradients(grads,model.trainable_variables)
+	grads,loss = model.compute_gradients(X)
+	# print(grads,loss)
+	optimizer.apply_gradients(zip(grads,model.trainable_variables))
 
-	return y,loss
+	return loss
 
 
 def main():
@@ -286,7 +295,7 @@ def main():
 
 	model.add(Squeeze())
 	model.add(Conv())
-	model.add(UpperCoupledReLU())
+	# model.add(UpperCoupledReLU())
 
 	print(model.layers)
 
@@ -295,17 +304,16 @@ def main():
 	optimizer = tf.optimizers.Adam(0.001)
 	pred1 	= model.predict(X[:1])	#Don't remove,essential to build the layers...
 	for it in range(epochs):
-		train_for_one_iter(model,X[:fast],optimizer)
-
+		loss = train_for_one_iter(model,X[:fast],optimizer)
+		print(loss)
 	fixed_noise = tf.random.normal((1,16,16,12),0,std_dev)
 
 	pred1 	= model.call(X[:2])
 	rec = model.predict_inv(fixed_noise[:1])
 
 	fig, ax = plt.subplots(1, 3)
-	print(rec.get_shape())
 	ax[0].imshow(prettify(X[1].reshape(32,32,3)))
-	ax[1].imshow(prettify(pred1[1].reshape(32,32,3)))
+	ax[1].imshow(prettify(pred1[1].numpy().reshape(32,32,3)))
 	ax[2].imshow(prettify(rec.numpy()[0].reshape(32,32,3)))
 	plt.show()
 
