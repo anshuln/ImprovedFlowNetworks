@@ -8,6 +8,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 TODO - Make a function to compute gradients effficiently in model class  -- TO BE Tested
 	   This should call comput grads in all layers, make fucntions accordingly -- TO BE Tested
 	   In main training loop, call apply_grads on model (using some optimizer)
+	   Cleaning
 
 Adapted version of this code - https://github.com/tensorflow/tensorflow/tree/master/tensorflow/contrib/eager/python/examples/revnet
 '''
@@ -38,11 +39,11 @@ class FlowSequential(tf.keras.Sequential):
 		return X
 
 	def _call(self,X,training=True):		#Hack is to differentiate it from predict, and to build the model....
+											#TODO - cleanup this function
 		self.saved_hidden = []
 		self.saved_hidden.append(X)
 		for layer in self.layers[:-1]:
 			X = layer.call(X)
-			# print(X.shape)
 
 		self.saved_hidden.append(X)
 
@@ -63,7 +64,6 @@ class FlowSequential(tf.keras.Sequential):
 		last_layer = self.layers[-1]
 		with tf.GradientTape() as tape:
 			tape.watch(x)
-			# print(tape.watched_variables())
 			loss = self.loss_function(last_layer.call(x))	#May have to change
 		grads_combined = tape.gradient(loss,[x]+last_layer.trainable_variables)
 		dy, final_grads = grads_combined[0], grads_combined[1:]
@@ -99,21 +99,12 @@ class LayerWithGrads(tf.keras.layers.Layer):	#Virtual Class
 	def backward_grads(self,x,y,dy):
 		with tf.GradientTape() as tape:
 			tape.watch(x)
-		grads_combined = tape.gradient(y,[x]+self.trainable_variables,output_gradients=dy)
-		dy,grads = grads_combined[0],grads_combined[1:]
-
-		return dy,grads
-
-class Conv(tf.keras.layers.Layer): 
-
-	def backward_grads(self,x,y,dy):
-		with tf.GradientTape() as tape:
-			tape.watch(x)
-			tape.watch(self.w_real)
-			y_ = self.call(x)
+			y_ = self.call(x)	#Required to register the operation onto the gradient tape
 		grads_combined = tape.gradient(y_,[x]+self.trainable_variables,output_gradients=dy)
 		dy,grads = grads_combined[0],grads_combined[1:]
 		return dy,grads
+
+class Conv(LayerWithGrads): 
 
 	def __init__(self,trainable=True): 
 		self.built = False
@@ -139,7 +130,6 @@ class Conv(tf.keras.layers.Layer):
 
 
 	def call_inv(self, X): 
-		# return X
 		X = tf.cast(X, dtype=tf.complex64)
 		X = tf.signal.fft3d(X * self.scale ) # self.scale correctly 
 		#The next 2 lines are a redundant computation necessary because w needs to be an EagerTensor for the output to be eagerly executed, and that was not the case earlier
@@ -162,14 +152,10 @@ class Conv(tf.keras.layers.Layer):
 
 		def identitiy_initializer_real(shape, dtype=None):
 			return (tf.math.real(tf.signal.ifft3d(tf.ones(shape, dtype=tf.complex64)*self.scale))) 
-		#def init(shape, dtype=None):
-		#	zeros = np.zeros(shape) # TODO: explain why
-		#	zeros[0,0,0] = 1 
-		#	return zeros
 
 		self.w_real 	= self.add_variable(name="w_real",shape=input_shape[1:], initializer=identitiy_initializer_real, trainable=True)
-		self.w 	= tf.cast(self.w_real, dtype=tf.complex64)	#hacky way to initialize real w and actual w, since tf does weird stuff if 'variable' is modified
-		self.w 	= tf.signal.fft3d(self.w / self.scale)
+		# self.w 	= tf.cast(self.w_real, dtype=tf.complex64)	#hacky way to initialize real w and actual w, since tf does weird stuff if 'variable' is modified
+		# self.w 	= tf.signal.fft3d(self.w / self.scale)
 		self.built = True
 
 		
@@ -180,18 +166,10 @@ class Conv(tf.keras.layers.Layer):
 def ReLU(x): return tf.math.maximum( x, 0 )
 
 
-class UpperCoupledReLU(tf.keras.layers.Layer): 		#TODO - fix problem with concat giving bad object
+class UpperCoupledReLU(LayerWithGrads): 		
 	def __init__(self,trainable=True): 
 		self.built = False
 		super(UpperCoupledReLU, self).__init__()
-
-	def backward_grads(self,x,y,dy):
-		with tf.GradientTape() as tape:
-			tape.watch(x)
-		grads_combined = tape.gradient(y,[x]+self.trainable_variables,output_gradients=dy)
-		dy,grads = grads_combined[0],grads_combined[1:]
-
-		return dy,grads
 
 	def call(self, inputs): 		
 		_, h, w, c = inputs.shape
@@ -208,7 +186,6 @@ class UpperCoupledReLU(tf.keras.layers.Layer): 		#TODO - fix problem with concat
 
 
 	def call_inv(self, outputs): 	
-		print(tf.shape(outputs))
 		_, h, w, c = outputs.shape
 
 		# assumes c is even
@@ -241,9 +218,9 @@ class LowerCoupledReLU(UpperCoupledReLU):
 		return dy,grads
 
 
-class Squeeze(tf.keras.layers.Layer): 
+class Squeeze(LayerWithGrads): 
 	def __init__(self,trainable=True): 
-		# self.built = False
+		self.built = False
 		super(Squeeze, self).__init__()
 	
 
@@ -272,18 +249,9 @@ class Squeeze(tf.keras.layers.Layer):
 
 	def log_det(self): return 0.
 
-	def backward_grads(self,x,y,dy):
-		with tf.GradientTape() as tape:
-			tape.watch(x)
-		grads_combined = tape.gradient(y,[x]+self.trainable_variables,output_gradients=dy)
-		dy,grads = grads_combined[0],grads_combined[1:]
 
-		return dy,grads
-
-
-def train_for_one_iter(model,X,optimizer):
+def train_for_one_iter(model,X,optimizer):	#TODO implement batch gradient descent here
 	grads,loss = model.compute_gradients(X)
-	# print(grads,loss)
 	optimizer.apply_gradients(zip(grads,model.trainable_variables))
 
 	return loss
@@ -296,34 +264,39 @@ def main():
 
 
 	# [ - 0.5 , 0.5  ]
-	X = X / 1 - 127.5 
+	X = (X - 127.5)
 	std_dev = 2**8
 
 	model = FlowSequential()
 
 	model.add(Squeeze())
 	model.add(Conv())
-	model.add(Conv())
+	model.add(UpperCoupledReLU())
 
-	# model.add(UpperCoupledReLU())
+	model.add(Conv())
+	model.add(LowerCoupledReLU())
 
 	print(model.layers)
 
-	epochs = 1
-	fast = 100
+	epochs = 1000
+	fast = 10000
 	optimizer = tf.optimizers.Adam(0.001)
 	pred1 	= model.predict(X[:1])	#Don't remove,essential to build the layers...
+	losses = []
 	for it in range(epochs):
 		loss = train_for_one_iter(model,X[:fast],optimizer)
-		print(loss)
+		print('Epoch : ',it,'Loss : ',loss.numpy())
+		losses.append(loss.numpy())
 	fixed_noise = tf.random.normal((1,16,16,12),0,std_dev)
 
 	pred1 	= model.call(X[:2])
+	rec1 = model.predict_inv(pred1)
 	rec = model.predict_inv(fixed_noise[:1])
-
+	plt.plot(np.arange(len(losses)),losses)
+	plt.show()
 	fig, ax = plt.subplots(1, 3)
 	ax[0].imshow(prettify(X[1].reshape(32,32,3)))
-	ax[1].imshow(prettify(pred1[1].numpy().reshape(32,32,3)))
+	ax[1].imshow(prettify(rec1[1].numpy().reshape(32,32,3)))
 	ax[2].imshow(prettify(rec.numpy()[0].reshape(32,32,3)))
 	plt.show()
 
