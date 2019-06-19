@@ -13,6 +13,8 @@ TODO - Make a function to compute gradients effficiently in model class  -- TO B
 	   This should call comput grads in all layers, make fucntions accordingly -- TO BE Tested
 	   In main training loop, call apply_grads on model (using some optimizer)
 	   Cleaning
+	   intermediate layer grad computation
+	   iteratively update weights
 
 Adapted version of this code - https://github.com/tensorflow/tensorflow/tree/master/tensorflow/contrib/eager/python/examples/revnet
 '''
@@ -34,9 +36,9 @@ class FlowSequential(tf.keras.Sequential):
 	def loss_function(self,X):	#nll loss
 		def log_normal_density(x): return tf.math.reduce_sum( -1/2 * (x**2/std_dev**2 + tf.math.log(2*np.pi*std_dev**2)) )
 
-		log_det = self.log_det()
+		log_det = self.log_det()	#This can be thought of as a regularizer...
 		normal = log_normal_density(X)
-		return -(log_det+normal)
+		return -(log_det+normal) 
 
 	def predict_inv(self,X):
 		for layer in self.layers[::-1]:
@@ -46,6 +48,7 @@ class FlowSequential(tf.keras.Sequential):
 	def get_last_inp(self,X,training=True):		#TODO - cleanup this function
 		y1 = X
 		for layer in self.layers[:-1]:
+			# print('forward',y1[0])
 			y1 = layer.call(y1)
 
 		return y1
@@ -57,37 +60,63 @@ class FlowSequential(tf.keras.Sequential):
 			det = tf.add(det,layer.log_det())
 		return det
 
-	def compute_gradients(self,X):
+	def compute_gradients(self,X,optimizer=None):
 		'''
 		Computes gradients efficiently
 		Returns - Tuple with first entry being list of grads and second loss
 		'''
-		x = self.get_last_inp(X)		#I think this records all operations onto the tape, thereby destroying purpose of checkpointing...
+		x = self.call(X)		#I think putting this in context records all operations onto the tape, thereby destroying purpose of checkpointing...
 		last_layer = self.layers[-1]
 		with tf.GradientTape() as tape:
 			tape.watch(x)
-			loss = self.loss_function(last_layer.call(x))	#May have to change
-		grads_combined = tape.gradient(loss,[x]+last_layer.trainable_variables)
-		dy, final_grads = grads_combined[0], grads_combined[1:]
+			loss = self.loss_function(x)	#May have to change
+		grads_combined = tape.gradient(loss,[x])
+		dy = grads_combined[0]
+		y = x
 
-		y=x
-		intermediate_grads = []
+		# for layer in self.layers[-1:-2:-1]:
+		# 	x = layer.call_inv(y)
+		# 	with tf.GradientTape() as tape:
+		# 		tape.watch(x)
+		# 		y = layer.call(x)
+		# 	grads_wrt_input  = tape.gradient(y,[x]+layer.trainable_variables,output_gradients=dy) 		
 
-		for layer in self.layers[-2:0:-1]:		#Not iterating over the first layer since we don't want that gradient to change according to input
+		# 	dy = grads_wrt_input[0]
+		# 	W_grads = grads_wrt_input[1:]
+
+		# 	with tf.GradientTape() as tape:
+		# 		log_det = -layer.log_det()
+		# 	grads_wrt_logdet = tape.gradient(log_det, layer.trainable_variables)
+
+
+		# 	final_grads = [a[0]+a[1] for a in zip(W_grads,grads_wrt_logdet)] 
+			
+		# 	y=x
+		# intermediate_grads = []
+
+		for layer in self.layers[::-1]:		
 			x = layer.call_inv(y)
-			dy,grads = layer.backward_grads(x,dy)
-			intermediate_grads = grads+intermediate_grads
+			dy,grads = layer.backward_grads(x,dy,layer.log_det)
+			# intermediate_grads = grads+intermediate_grads
+			optimizer.apply_gradients(zip(grads,layer.trainable_variables))
 			y = x 
 
-		x = self.layers[0].call_inv(y)
-		with tf.GradientTape() as tape:
-			tape.watch(x)
-			y = self.layers[0].call(x)
-		init_grads = tape.gradient(y,self.layers[0].trainable_variables,output_gradients=dy)
+		# x = self.layers[0].call_inv(y)
+		# with tf.GradientTape() as tape:
 
-		grads_all = init_grads + final_grads + intermediate_grads 	#Check ordering once, compare with model.trainable_variables
-		print(len(init_grads),len(final_grads),len(intermediate_grads))
-		return grads_all,loss
+		# 	tape.watch(x)
+		# 	y = self.layers[0].call(x)
+		# init_grads  = tape.gradient(y,self.layers[0].trainable_variables,output_gradients=dy) 		
+
+		# # with tf.GradientTape() as tape:
+		# # 	log_det = -self.layers[0].log_det()
+		# # grads_wrt_logdet = tape.gradient(log_det, self.layers[0].trainable_variables)
+			
+		# # init_grads = [a[0]+a[1] for a in zip(grads_wrt_input,grads_wrt_logdet)]
+		
+		# grads_all = init_grads + final_grads + intermediate_grads 	#Check ordering once, compare with model.trainable_variables
+		# print(len(init_grads),len(final_grads),len(intermediate_grads))
+		return loss
 
 	def other_grads(self,X):
 		with tf.GradientTape() as tape:
@@ -104,13 +133,20 @@ class LayerWithGrads(tf.keras.layers.Layer):	#Virtual Class
 
 	def call_inv(self,X):
 		raise NotImplementedError
+	def log_det(self):
+		raise NotImplementedError
 
-	def backward_grads(self,x,dy):	
+	def backward_grads(self,x,dy,regularizer=None):	
 		with tf.GradientTape() as tape:
 			tape.watch(x)
 			y_ = self.call(x)	#Required to register the operation onto the gradient tape
 		grads_combined = tape.gradient(y_,[x]+self.trainable_variables,output_gradients=dy)
 		dy,grads = grads_combined[0],grads_combined[1:]
+		if regularizer is not None:
+			with tf.GradientTape() as tape:
+				reg = -regularizer()
+			grads_wrt_reg = tape.gradient(reg, self.trainable_variables)
+			grads = [a[0]+a[1] for a in zip(grads,grads_wrt_reg)]
 		return dy,grads
 
 class Conv(LayerWithGrads): 
@@ -207,7 +243,7 @@ class UpperCoupledReLU(LayerWithGrads):
 		
 		return tf.concat((x1, x2), axis=-1)
 
-	def log_det(self): 				return 0. 
+	def log_det(self): 				return tf.zeros((1,)) 
 
 
 class LowerCoupledReLU(UpperCoupledReLU): 
@@ -249,7 +285,7 @@ class Squeeze(LayerWithGrads):
 		n, h, w, c = input_shape
 		return (n, h//2, w//2, c*4)
 
-	def log_det(self): return 0.
+	def log_det(self): return tf.zeros((1,))
 
 
 def train_for_one_iter(model,X,optimizer,batch_size=batch_size):	#TODO implement mini-batch gradient descent here
@@ -272,11 +308,11 @@ def train_for_one_iter(model,X,optimizer,batch_size=batch_size):	#TODO implement
 	#Above code was for mini-batch gradient descent, but it gave weird results
 
 	grads,loss = model.other_grads(X)
-	g1, l1 = model.compute_gradients(X)
-	print((np.array(g1))-np.array(grads))
+	l1 = model.compute_gradients(X,optimizer)
+	# print((np.array(g1))-np.array(grads))
 	# print(np.array(grads))
-	optimizer.apply_gradients(zip(grads,model.trainable_variables))
-	loss = loss.numpy()
+	# optimizer.apply_gradients(zip(grads,model.trainable_variables))
+	loss = l1.numpy()
 	
 	return loss
 
@@ -293,23 +329,23 @@ def main():
 
 	model = FlowSequential()
 
-	# model.add(UpperCoupledReLU())
-	model.add(Conv())
 	model.add(Squeeze())
+	model.add(Conv())
+	model.add(UpperCoupledReLU())
 
 	# model.add(LowerCoupledReLU())
 
 	# model.add(Conv())
 	# model.add(UpperCoupledReLU())
 
-	# model.add(Conv())
-	# model.add(LowerCoupledReLU())
+	model.add(Conv())
+	model.add(LowerCoupledReLU())
 
-	# model.add(Conv())
-	# model.add(UpperCoupledReLU())
+	model.add(Conv())
+	model.add(UpperCoupledReLU())
 
-	# model.add(Conv())
-	# model.add(LowerCoupledReLU())
+	model.add(Conv())
+	model.add(LowerCoupledReLU())
 
 	# model.add(Conv())
 	# model.add(UpperCoupledReLU())
@@ -327,13 +363,13 @@ def main():
 	def loss_function(y1,y2):	#nll loss
 		def log_normal_density(x): return tf.math.reduce_sum( -1/2 * (x**2/std_dev**2 + tf.math.log(2*np.pi*std_dev**2)) )
 
-		log_det = model.log_det()
+		# log_det = model.log_det()
 		normal = log_normal_density(y2)
-		return -(log_det + normal)
+		return -(normal) # log_det + 
 
 
-	epochs = 100
-	fast = 500
+	epochs = 1000
+	fast = 10000
 	optimizer = tf.optimizers.Adam(0.001)
 	pred1 	= model.predict(X[:1])	#Don't remove,essential to build the layers...
 	# model.compile(optimizer=tf.optimizers.Adam(0.001), loss=loss_function)
