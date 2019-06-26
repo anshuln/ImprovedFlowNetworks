@@ -1,21 +1,3 @@
-1. Finish baseline. 
-	a) make a 3 layer network trained on cifar on NLL. 
-	b) add non-linearity, additive coupling layer with relu. 
-----DONE
-
-
-# OPTIMIZATIONS 
-
-2. FFT of real input is complex symmetric (see wiki on DFT). Make benchmarks. 
---Almost done, need to benchmark
-
-3. Maybe we can use this tf.rfft. 
-Made a custom implrmentation of rfft3d, because tf implementation doesn't have gradients defined. 
-My implementation is almost as good as the tf implementation on time consumption metric.
---DONE
-
-
-4. DONT Get gradient checkpointing ;; https://github.com/openai/gradient-checkpointing
-	(but use it to understand graph editor)
-	and try to get constant depth memory 
---DONE
+TODO-
+1. Get conditional flows in dequantization.py
+2. Get faster mini-batch gradient descent for gradient_checkpointing by either overriding keras fit function's internals or writing your own fit function.
