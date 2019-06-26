@@ -33,10 +33,11 @@ class Dequantizer(FlowSequential):
 
 class FlowWithDequant(FlowSequential):
 
-	def __init__(self, actualFlow,dequantFlowLayers=[Squeeze(),	Conv(),UpperCoupledReLU(),LowerCoupledReLU()]):
+	def __init__(self, actualFlow,dequantFlowLayers=[Squeeze(), Conv(),UpperCoupledReLU(),LowerCoupledReLU()]):
 		super(FlowWithDequant,self).__init__()
 		self.dequantFlow = Dequantizer(dequantFlowLayers)
 		self.actualFlow = actualFlow
+		self.layers = self.dequantFlow.layers + self.actualFlow.layer
 
 	def call(self, X):
 		return self.actualFlow.call(self.dequantFlow.call(X))
