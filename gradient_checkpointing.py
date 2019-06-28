@@ -11,7 +11,7 @@ os.environ['TF_CPP_MIN_VLOG_LEVEL']='3'
 '''
 TODO - Make a function to compute gradients effficiently in model class  -- DONE
 	   This should call comput grads in all layers, make fucntions accordingly -- DONE
-	   Cleaning	-- In Progress
+	   Cleaning -- In Progress
 	   intermediate layer grad computation -- DONE
 	   iteratively update weights --DONE
 Adapted version of this code - https://github.com/tensorflow/tensorflow/tree/master/tensorflow/contrib/eager/python/examples/revnet
@@ -21,13 +21,13 @@ class FlowSequential(tf.keras.Sequential):
 	
 	def __init__(self):
 		super(FlowSequential,self).__init__()
-	# 	self.saved_hidden = []   #Will store the input and activations of the last layer similar to gradient checkpointing 
-	# 							 #TODO convert this to a tensor instead of list for GPU storage
+	#   self.saved_hidden = []   #Will store the input and activations of the last layer similar to gradient checkpointing 
+	#                            #TODO convert this to a tensor instead of list for GPU storage
 
-	def loss_function(self,X):	#nll loss
+	def loss_function(self,X):  #nll loss
 		def log_normal_density(x): return tf.math.reduce_sum( -1/2 * (x**2/std_dev**2 + tf.math.log(2*np.pi*std_dev**2)) )
 
-		log_det = self.log_det()	#This can be thought of as a regularizer...
+		log_det = self.log_det()    #This can be thought of as a regularizer...
 		normal = log_normal_density(X)
 		return -(log_det+normal) 
 
@@ -36,7 +36,7 @@ class FlowSequential(tf.keras.Sequential):
 			X = layer.call_inv(X)
 		return X
 
-	def get_last_inp(self,X,training=True):		#TODO - cleanup this function
+	def get_last_inp(self,X,training=True):     #TODO - cleanup this function
 		y1 = X
 		for layer in self.layers[:-1]:
 			# print('forward',y1[0])
@@ -56,17 +56,17 @@ class FlowSequential(tf.keras.Sequential):
 		Computes gradients efficiently and updates weights
 		Returns - Loss on the batch
 		'''
-		x = self.call(X)		#I think putting this in context records all operations onto the tape, thereby destroying purpose of checkpointing...
+		x = self.call(X)        #I think putting this in context records all operations onto the tape, thereby destroying purpose of checkpointing...
 		last_layer = self.layers[-1]
 		#Computing gradients of loss function wrt the last acticvation
 		with tf.GradientTape() as tape:
 			tape.watch(x)
-			loss = self.loss_function(x)	#May have to change
+			loss = self.loss_function(x)    #May have to change
 		grads_combined = tape.gradient(loss,[x])
 		dy = grads_combined[0]
 		y = x
 		#Computing gradients for each layer
-		for layer in self.layers[::-1]:		
+		for layer in self.layers[::-1]:     
 			x = layer.call_inv(y)
 			dy,grads = layer.compute_gradients(x,dy,layer.log_det)
 			optimizer.apply_gradients(zip(grads,layer.trainable_variables))
@@ -93,12 +93,12 @@ class FlowSequential(tf.keras.Sequential):
 		num_batches = X.shape[0] // batch_size
 		X = np.random.permutation(X)
 		#Minibatch gradient descent
-		for i in tqdm(range(0,X.shape[0]-X.shape[0]%batch_size,batch_size)):	
+		for i in tqdm(range(0,X.shape[0]-X.shape[0]%batch_size,batch_size)):    
 			# grads,loss = model.compute_gradients(X[i:(i+batch_size)])
 			losses = []
 			loss = self.compute_and_apply_gradients(X[i:(i+batch_size)],optimizer)
 			losses.append(loss.numpy())
-		loss = np.mean(losses)	
+		loss = np.mean(losses)  
 
 		# loss = model.compute_and_apply_gradients(X,optimizer)
 		# loss = loss.numpy()
@@ -106,7 +106,7 @@ class FlowSequential(tf.keras.Sequential):
 		return loss
 
 
-class LayerWithGrads(tf.keras.layers.Layer):	#Virtual Class
+class LayerWithGrads(tf.keras.layers.Layer):    #Virtual Class
 	def __init__(self):
 		super(LayerWithGrads,self).__init__()
 
@@ -116,7 +116,7 @@ class LayerWithGrads(tf.keras.layers.Layer):	#Virtual Class
 	def call_inv(self,X):
 		raise NotImplementedError
 
-	def compute_gradients(self,x,dy,regularizer=None):	
+	def compute_gradients(self,x,dy,regularizer=None):  
 		'''
 		Computes gradients for backward pass
 		Args:
@@ -129,7 +129,7 @@ class LayerWithGrads(tf.keras.layers.Layer):	#Virtual Class
 		'''
 		with tf.GradientTape() as tape:
 			tape.watch(x)
-			y_ = self.call(x)	#Required to register the operation onto the gradient tape
+			y_ = self.call(x)   #Required to register the operation onto the gradient tape
 		grads_combined = tape.gradient(y_,[x]+self.trainable_variables,output_gradients=dy)
 		dy,grads = grads_combined[0],grads_combined[1:]
 

@@ -70,3 +70,12 @@ class FlowWithDequant(FlowSequential):
 			optimizer.apply_gradients(zip(grads, layer.trainable_variables))
 			y = x
 		return loss
+
+'''
+Usage - 
+	model = FlowSequential()
+	model.add(Conv())
+	...
+	model1 = FlowWithDequant(model,dequantFlowLayers=[Conv(),Relu()...])
+	#Beyond this point, just replace model with model1 everywhere
+'''
