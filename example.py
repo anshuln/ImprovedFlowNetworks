@@ -12,9 +12,10 @@ if __name__ == "__main__":
 	model.add(LowerCoupledReLU())
 
 	for i in range(5):	#Epochs
-		X,num_batches = load_images_dataset('Data')
-		iter = X.make_one_shot_iterator()
-		loss = model.train_for_one_epoch_generator(X,num_batches)
+		X,num_batches = load_image_dataset('Data')
+		iterator = iter(X)
+		optimizer = tf.optimizers.Adam()
+		loss = model.train_for_one_epoch_generator(iterator,optimizer,num_batches)
 		print('Epoch {}, loss {}'.format(i,loss))
 
 

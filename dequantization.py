@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 
-from gradient_checkpointing import FlowSequential, prettify
+from gradient_checkpointing import FlowSequential
 from layers import *
 
 # TODO - get conditional flows to work, currently dequantization is

@@ -1,4 +1,5 @@
 import tensorflow as tf
+import os
 
 def load_image_dataset(folder, new_size=(64, 64),batch_size=32):
 	def _parse_function(filename):
