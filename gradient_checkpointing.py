@@ -81,7 +81,7 @@ class FlowSequential(tf.keras.Sequential):
 			loss = self.loss_function(self.call(X))
 		grads = tape.gradient(loss,self.trainable_variables)
 		return grads,loss
-	def train_for_one_iter(self,X,optimizer,batch_size=batch_size):
+	def train_for_one_epoch_data(self,X,optimizer,batch_size=batch_size):
 		'''
 		Trains the model on data for one iteration
 		Args:
@@ -104,6 +104,18 @@ class FlowSequential(tf.keras.Sequential):
 		# loss = loss.numpy()
 		
 		return loss
+
+	def train_for_one_epoch_generator(self,X,optimizer,num_batches):
+		'''
+		Trains model for an epoch using a tf.data.Dataset iter
+		X- tf.data.Dataset.__iter__()
+		'''
+		for i in tqdm(range(num_batches)):
+			losses = []
+			loss = self.compute_and_apply_gradients(next(X),optimizer)
+			losses.append(loss.numpy())
+		loss = np.mean(losses)  
+
 
 
 class LayerWithGrads(tf.keras.layers.Layer):    #Virtual Class
