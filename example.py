@@ -11,11 +11,11 @@ if __name__ == "__main__":
 	model.add(Conv())
 	model.add(LowerCoupledReLU())
 
+	X,num_batches = load_image_dataset('Data',epochs=5)
+	optimizer = tf.optimizers.Adam()
+
 	for i in range(5):	#Epochs
-		X,num_batches = load_image_dataset('Data')
-		iterator = iter(X)
-		optimizer = tf.optimizers.Adam()
-		loss = model.train_for_one_epoch_generator(iterator,optimizer,num_batches)
+		loss = model.train_for_one_epoch_generator(X,optimizer,num_batches)
 		print('Epoch {}, loss {}'.format(i,loss))
 
 

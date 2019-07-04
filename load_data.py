@@ -1,7 +1,7 @@
 import tensorflow as tf
 import os
 
-def load_image_dataset(folder, new_size=(64, 64),batch_size=32):
+def load_image_dataset(folder, epochs,new_image_size=(64, 64),batch_size=32):
 	def _parse_function(filename):
 		image_string = tf.io.read_file(filename)
 		image_decoded = tf.image.decode_jpeg(image_string)
@@ -12,7 +12,8 @@ def load_image_dataset(folder, new_size=(64, 64),batch_size=32):
 		folder) if os.path.isfile(os.path.join(folder, f))]
 	dataset = tf.data.Dataset.from_tensor_slices(tf.constant(files))
 	dataset = dataset.shuffle(buffer_size=100)
+	dataset = dataset.repeat(count=epochs)
 	dataset = dataset.map(map_func=_parse_function,num_parallel_calls=4)
 	dataset = dataset.prefetch(buffer_size=32)
 	dataset = dataset.batch(batch_size=batch_size)
-	return dataset,(len(files)//batch_size)
+	return iter(dataset),(len(files)//batch_size)
