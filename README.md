@@ -8,3 +8,4 @@ The following are implemented -
 	* `gradient_checkpointing.py` contains relevant layer and model classes which can be generalized to other models.
 3. Variational dequantization according to [this](https://arxiv.org/abs/1902.00275) paper.
 	* `dequantization.py` contains the `FlowWithDequant` class which can wrap around any flow to make it dequantized.
+4. Faster data loaders for images using `tf.data.Dataset`.
