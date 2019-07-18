@@ -1,5 +1,6 @@
 # ImprovedFlowNetworks
 Some tricks to improve flow networks
+The `Modular` branch is maintained currently.
 
 The following are implemented - 
 1. Faster fft of real valued vectors by exploiting complex symmetry of the fourier transforms. 
