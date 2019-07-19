@@ -1,5 +1,5 @@
 # ImprovedFlowNetworks
-Some tricks to improve flow networks
+Some tricks to improve flow networks. See `example.py` for a simple use case.
 
 The following are implemented - 
 1. Faster fft of real valued vectors by exploiting complex symmetry of the fourier transforms. 
